@@ -1,12 +1,24 @@
 "use client"
 
+import {
+  BlobReader,
+  BlobWriter,
+  TextReader,
+  TextWriter,
+  ZipReader,
+  ZipWriter,
+} from "@zip.js/zip.js";
+
 import { useRef } from "react";
 import React, { useState } from 'react';
+import { Button } from "./components/Button";
 
 type FileItem =
   {
     name: string;
     size: number;
+
+    byteArray: ArrayBuffer;
   }
 
 const formatSize = (size: number) => {
@@ -20,49 +32,27 @@ const formatSize = (size: number) => {
 export default function Home() {
 
   const [items, setItems] = useState<FileItem[]>([])
-  // const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-  //   setSelectedValue(event.target.value);
-  //   console.log('Hai selezionato:', event.target.value);
-  // };
-
-  {/** const FileListView: React.FC = () => {
-  return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead>
-        <tr>
-          <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>Nome file</th>
-          <th style={{ textAlign: 'right', borderBottom: '1px solid #ccc' }}>Dimensione</th>
-        </tr>
-      </thead>
-      <tbody>
-        {fileList.map((file, index) => (
-          <tr key={index}>
-            <td style={{ padding: '8px 4px' }}>{file.name}</td>
-            <td style={{ padding: '8px 4px', textAlign: 'right' }}>{formatSize(file.size)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-};
- */  }
 
   const ListView: React.FC = () => {
     const itemList = items.map((item, index) => (
       <tr>
-
-        <td>{item.name}</td>
-        <td> {formatSize(item.size)}</td>
+        <td className="py-2">{item.name}</td>
+        <td className="py-2"> {formatSize(item.size)}</td>
       </tr>
     ));
     return (
-      <div>
-        <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400">
-          <tr>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>File Name</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>File Size</th>
-          </tr>
-          {itemList}</table>
+      <div className="mt-6 mb-6"> {/* <-- spazio sopra e sotto */}
+        <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400 border-separate border-spacing-y-2">
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>File Name</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>File Size</th>
+            </tr>
+          </thead>
+          <tbody>
+            {itemList}
+          </tbody>
+        </table>
       </div>
     );
   }
@@ -70,30 +60,94 @@ export default function Home() {
   const fileUploader = useRef<HTMLInputElement>(null);
 
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setItems([...items, { name: file.name, size: file.size }])
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = event.target.files;
 
-
+    if (!fileList || fileList.length == 0) {
+      alert("Please select at least one file!");
+      return;
     }
 
+    const newItems = await Promise.all(
+      Array.from(fileList).map(async (file) => {
+        const arrayBuffer = await file.arrayBuffer()
+        // const uint8Array = new Uint8Array(arrayBuffer);
+
+        return {
+          name: file.name,
+          size: file.size,
+          byteArray: arrayBuffer,
+        };
+      }
+      ))
+
+    setItems(prevItems => [...prevItems, ...newItems]);
   }
+
+  async function createZIPThread() {
+    const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
+
+    const files = items
+
+    //const totalFilesSizes = files.reduce((sum, f) => sum + f.size, 0);
+
+    //let totalBytesWritten = 0;
+
+    await Promise.all(
+      files.map(async (file) => {
+
+        const arrayBufferLike: ArrayBufferLike = file.byteArray;
+        const uint8 = new Uint8Array(arrayBufferLike);
+
+        const fileBlob = new Blob([uint8], { type: 'application/octet-stream' });
+
+        zipWriter.add(file.name, new BlobReader(fileBlob));
+      })
+    )
+
+    return zipWriter.close();
+  }
+
+  function onClearFilesButtonClicked() {
+    setItems([]);
+    alert("Files List Cleared");
+  }
+
   function onBrowseButtonClicked() {
     fileUploader.current?.click();
   }
 
-  return (
-    <div className="grid flex justify-center m-50 gap-10">
 
-      <p className="font-sans text-xl">Selezionare i files da comprimere nell'archivio:</p>
+  function downloadFile(blob: any) {
+    const a = document.createElement("a");
+    a.download = "test.zip"
+    a.href = URL.createObjectURL(blob)
+    a.textContent = "Downloadfi"
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+
+
+  }
+
+
+  async function onMakeZIPButtonClicked() {
+    const zippedFile = createZIPThread();
+    downloadFile(zippedFile);
+
+  }
+
+  return (
+    <div className="grid flex justify-center m-50 gap-5">
+
+      <p className="font-sans text-xl">Select the files to compress into the archive:</p>
       <p></p>
       <ListView />
-      <input className="hidden" type="file" onChange={handleFileChange} ref={fileUploader} />
-      <button className="font-sans text-lg font-bold border-2 border-double h-8 w-full bg-yellow-200 hover:bg-red-200"
-        onClick={onBrowseButtonClicked}>Browse File...</button>
+      <input className="hidden" type="file" multiple onChange={handleFileChange} ref={fileUploader} />
 
-
+      <Button onButtonClicked={onClearFilesButtonClicked} btnText="Clear Files" />
+      <Button onButtonClicked={onBrowseButtonClicked} btnText="Browse File..." />
+      <Button onButtonClicked={onMakeZIPButtonClicked} btnText="Make ZIP" />
 
     </div>
   );
