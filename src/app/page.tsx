@@ -1,17 +1,16 @@
 "use client"
 
+
 import {
   BlobReader,
   BlobWriter,
-  TextReader,
-  TextWriter,
-  ZipReader,
   ZipWriter,
 } from "@zip.js/zip.js";
 
 import { useRef } from "react";
 import React, { useState } from 'react';
 import { Button } from "./components/Button";
+import { ProgressBar } from './components/ProgressBar'
 
 type FileItem =
   {
@@ -28,10 +27,12 @@ const formatSize = (size: number) => {
   return size + ' B';
 };
 
-
 export default function Home() {
 
   const [items, setItems] = useState<FileItem[]>([])
+  const [elaboratedSize, setElaboratedSize] = useState(0);
+  const [totalSize, setTotalSize] = useState(0);
+  const [showProgress, setShowProgress] = useState(false);
 
   const ListView: React.FC = () => {
     const itemList = items.map((item, index) => (
@@ -84,27 +85,27 @@ export default function Home() {
     setItems(prevItems => [...prevItems, ...newItems]);
   }
 
-  async function createZIPThread() {
+  async function createZIPThread() 
+  {
     const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
 
     const files = items
 
-    //const totalFilesSizes = files.reduce((sum, f) => sum + f.size, 0);
-
-    //let totalBytesWritten = 0;
+    setTotalSize(items.reduce((pV, cV) => cV.size + pV, 0))
 
     await Promise.all(
-      files.map(async (file) => {
-
+      files.map(async (file) => 
+      {
         const arrayBufferLike: ArrayBufferLike = file.byteArray;
         const uint8 = new Uint8Array(arrayBufferLike);
-
         const fileBlob = new Blob([uint8], { type: 'application/octet-stream' });
-
-        zipWriter.add(file.name, new BlobReader(fileBlob));
+        await zipWriter.add(file.name, new BlobReader(fileBlob));
+        
+         setElaboratedSize((prev) =>  prev + file.size);
       })
     )
-
+    
+    
     return zipWriter.close();
   }
 
@@ -126,15 +127,18 @@ export default function Home() {
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-
-
   }
 
 
   async function onMakeZIPButtonClicked() {
-    const zippedFile = createZIPThread();
+    const zipThread = createZIPThread();
+    setShowProgress(true)
+    const zippedFile = await zipThread
+    setShowProgress(false)
     downloadFile(zippedFile);
-
+    setItems([])
+    setTotalSize(0)
+    setElaboratedSize(0)
   }
 
   return (
@@ -148,6 +152,7 @@ export default function Home() {
       <Button onButtonClicked={onClearFilesButtonClicked} btnText="Clear Files" />
       <Button onButtonClicked={onBrowseButtonClicked} btnText="Browse File..." />
       <Button onButtonClicked={onMakeZIPButtonClicked} btnText="Make ZIP" />
+      {showProgress && <ProgressBar progress={elaboratedSize/totalSize} />}
 
     </div>
   );
