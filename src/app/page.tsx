@@ -72,7 +72,6 @@ export default function Home() {
     const newItems = await Promise.all(
       Array.from(fileList).map(async (file) => {
         const arrayBuffer = await file.arrayBuffer()
-        // const uint8Array = new Uint8Array(arrayBuffer);
 
         return {
           name: file.name,
@@ -85,27 +84,22 @@ export default function Home() {
     setItems(prevItems => [...prevItems, ...newItems]);
   }
 
-  async function createZIPThread() 
-  {
+  async function createZIPThread() {
     const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
 
     const files = items
 
     setTotalSize(items.reduce((pV, cV) => cV.size + pV, 0))
 
-    await Promise.all(
-      files.map(async (file) => 
-      {
-        const arrayBufferLike: ArrayBufferLike = file.byteArray;
-        const uint8 = new Uint8Array(arrayBufferLike);
-        const fileBlob = new Blob([uint8], { type: 'application/octet-stream' });
-        await zipWriter.add(file.name, new BlobReader(fileBlob));
-        
-         setElaboratedSize((prev) =>  prev + file.size);
-      })
-    )
-    
-    
+    for (const file of files) {
+      const arrayBufferLike: ArrayBufferLike = file.byteArray;
+      const uint8 = new Uint8Array(arrayBufferLike);
+      const fileBlob = new Blob([uint8], { type: 'application/octet-stream' });
+
+      await zipWriter.add(file.name, new BlobReader(fileBlob));
+      setElaboratedSize((prev) => prev + file.size);
+    }
+
     return zipWriter.close();
   }
 
@@ -151,8 +145,10 @@ export default function Home() {
 
       <Button onButtonClicked={onClearFilesButtonClicked} btnText="Clear Files" />
       <Button onButtonClicked={onBrowseButtonClicked} btnText="Browse File..." />
-      <Button onButtonClicked={onMakeZIPButtonClicked} btnText="Make ZIP" />
-      {showProgress && <ProgressBar progress={elaboratedSize/totalSize} />}
+      <Button onButtonClicked={onMakeZIPButtonClicked} btnText="Make ZIP" disabled={items.length === 0} />
+
+
+      { showProgress && <ProgressBar progress={elaboratedSize / totalSize * 100} />}
 
     </div>
   );
